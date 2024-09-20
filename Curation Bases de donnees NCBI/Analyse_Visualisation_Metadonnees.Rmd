@@ -1,0 +1,120 @@
+---
+title: "Analyse et Visualisation des metadonnees HEV"
+author: "Serigne Fallou MBacke NGOM"
+date: "2023-10-05"
+output: html_document
+---
+
+
+### RESUME DES VARIABLES D'INTERET:
+```{r, include=FALSE}
+library(plotly)
+library(dplyr)
+```
+
+```{r}
+data_HEV = read.csv2("HEV_metadonneesFiltrees.csv")
+head(data_HEV[,1:5 ])
+head(data_HEV[,6:10 ])
+data_HEV$ORF = factor(data_HEV$ORF)
+```
+
+```{r}
+for (i in c("Assembly.Method", "Sequencing.Technology", "genotype", "isolation_source", "host", "country")){
+  data_HEV[, i] = factor(data_HEV[, i])
+}
+summary(data_HEV[, c("Assembly.Method", "Sequencing.Technology", "genotype", "isolation_source", "host", "country", "ORF")])
+```
+
+
+
+### VISUALISATION DES DONNEES:
+
+```{r}
+library(plotly)
+
+data_HEV %>%
+  group_by(Annee) %>%
+  summarise(SequenceCount = n()) %>%
+  plot_ly(x = ~Annee, y = ~SequenceCount, type = "scatter", mode = "lines+markers", text = ~SequenceCount) %>%
+  layout(title = "Évolution du Nombre de Séquences au Fil des Années",
+         xaxis = list(title = "Année", tickmode = "linear", tick0 = min(data_HEV$Annee), dtick = 1),
+         yaxis = list(title = "Nombre de Séquences"),
+         hovermode = "closest")
+
+```
+
+
+```{r}
+data_HEV %>%
+  group_by(country) %>%
+  summarise(Count = n()) %>%
+  plot_geo(locations = ~country, z = ~Count, locationmode = "country names") %>%
+  layout(title = "Répartition des Données par Pays")
+```
+
+```{r}
+data_HEV %>%
+  group_by(ORF) %>%
+  summarise(Count = n()) %>%
+  plot_ly(labels = ~ORF, values = ~Count, type = "pie") %>%
+  layout(title = "Distribution ORF")
+```
+
+
+```{r}
+data_HEV %>%
+  group_by(Sequencing.Technology) %>%
+  summarise(Count = n()) %>%
+  plot_ly(labels = ~Sequencing.Technology, values = ~Count, type = "pie") %>%
+  layout(title = "Distribution sequences en fonction des Technologies de Sequenca")
+```
+
+```{r}
+data_HEV %>%
+  group_by(ORF) %>%
+  summarise(Count = n()) %>%
+  plot_ly(x = ~ORF, y = ~Count, type = "bar") %>%
+  layout(title = "Repartition des sequences en fonction des ORF")
+```
+
+```{r}
+data_HEV %>%
+  group_by(SOURCE) %>%
+  summarise(Count = n()) %>%
+  plot_ly(x = ~SOURCE, y = ~Count, type = "bar") %>%
+  layout(title = "Repartition des sequences en fonction des souches")
+```
+
+
+
+```{r}
+data_HEV %>%
+  group_by(isolation_source) %>%
+  summarise(Count = n()) %>%
+  plot_ly(x = ~isolation_source, y = ~Count, type = "bar", color = "Yellow") %>%
+  layout(title = "Repartition par source d'isolation")
+```
+
+
+```{r}
+# Chargement des bibliothèques nécessaires
+library(ggplot2)
+library(plotly)
+library(dplyr)
+
+# Création d'un dataframe regroupé par Localisation pour la création du graphique interactif
+data_HEV_grouped <- data_HEV %>%
+  group_by(Location.Qualifiers) %>%
+  summarise(Nombre_de_Sequences = n())
+
+# Création d'un diagramme de dispersion interactif avec les coordonnées génomiques sur l'axe des ordonnées
+plot_ly(data = data_HEV, x = ~Sequence_Length, y = ~Location.Qualifiers, type = "scatter", mode = "markers", 
+        marker = list(size = ~data_HEV_grouped$Nombre_de_Sequences)) %>%
+  layout(title = "Diagramme de dispersion des coordonnées génomiques, des longueurs séquences",
+         xaxis = list(title = "Longueur de la séquence"),
+         yaxis = list(title = "Coordonnées génomiques"),
+         showlegend = FALSE)
+
+```
+

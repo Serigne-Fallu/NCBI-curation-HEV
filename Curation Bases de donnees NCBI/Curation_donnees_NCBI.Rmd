@@ -1,0 +1,228 @@
+---
+title: "Curation donnees NCBI"
+author: "Serigne Fallou MBacke NGOM"
+date: "2023-09-26"
+output: html_document
+---
+
+Nous voulons récupérer toutes les sequences de genomes completes du virus de l'hépatite E (HEV) et les métadonnées associées aux séquences à partir de NCBI en utilisant R.
+
+
+## Rechercher et Télécharger les Séquences ADN completes du Virus de l'Hépatite E:
+```{r, include=FALSE}
+library(rentrez)
+
+# Effectuer une recherche sur NCBI pour "Hepatitis E virus" et "complete genome"
+h <- '"Hepatitis E virus" AND "complete genome"'
+entrez_search <- entrez_search(db = "nucleotide", term = search_term, retmax = 1115)
+
+# Récupérer les IDs des séquences correspondantes
+ids <- entrez_search$ids
+
+# Initialiser une liste pour stocker les séquences FASTA
+fasta_list <- list()
+
+# Télécharger les séquences FASTA pour chaque ID
+for (id in ids) {
+  entrez_fetch_fasta <- entrez_fetch(db = "nucleotide", id = id, rettype = "fasta", retmode = "text")
+  fasta_list[[id]] <- entrez_fetch_fasta
+}
+
+# Fusionner les séquences FASTA en une seule chaîne
+fasta_content <- unlist(fasta_list)
+writeLines(fasta_content, "HEV_Genomes.fasta", sep = "")
+```
+
+```{r}
+input_file <- "HEV_Genomes.fasta"
+output_file <- "HEV_Genomes.fasta"
+file_content <- readLines(input_file)
+non_empty_lines <- file_content[file_content != ""]
+file_conn <- file(output_file, "w")
+writeLines(non_empty_lines, file_conn)
+close(file_conn)
+```
+
+
+## Rechercher et Télécharger les metadonnees associees aux séquences HEV:
+```{r, include=FALSE}
+library(rentrez)
+library(dplyr)
+library(stringr)
+
+search_results <- entrez_search(db = "nucleotide", term = search_term, retmax = 1115)
+ids <- search_results$ids
+entrez_fetch(db = "nucleotide", id = id, rettype = "gb", timeout = 60)
+metadata_list <- list()
+for (id in ids) {
+  entrez_record <- entrez_fetch(db = "nucleotide", id = id, rettype = "gb")
+  metadata_list[[id]] <- entrez_record
+}
+
+```
+
+
+```{r}
+metadata_df <- data.frame(ID = ids, Metadata = unlist(metadata_list))
+metadata_df <- metadata_df %>%
+  mutate(
+    ACCESSION = str_extract(Metadata, "ACCESSION\\s+(.*?)\n"),
+    SOURCE = str_extract(Metadata, "SOURCE\\s+(.*?)\n"),
+    ORGANISM = str_extract(Metadata, "ORGANISM\\s+(.*?)\n"),
+    AUTHORS = str_extract(Metadata, "AUTHORS\\s+(.*?)\n"),
+    TITLE = str_extract(Metadata, "TITLE\\s+(.*?)\n"),
+    'Assembly Method' = str_extract(Metadata, "Assembly Method\\s+(.*?)\n"),
+    "Sequencing Technology" = str_extract(Metadata, "Sequencing Technology\\s+(.*?)\n"),
+    "Location/Qualifiers" = str_extract(Metadata, "Location/Qualifiers\\s+(.*?)\n"),
+    genotype = str_extract(Metadata, "genotype\\s+(.*?)\n"),
+    organism = str_extract(Metadata, "organism=\"(.*?)\""),
+    mol_type = str_extract(Metadata, "mol_type=\"(.*?)\""),
+    isolation_source = str_extract(Metadata, "isolation_source=\"(.*?)\""),
+    host = str_extract(Metadata, "host=\"(.*?)\""),
+    country = str_extract(Metadata, "country=\"(.*?)\""),
+    note = str_extract(Metadata, "note=\"(.*?)\"")
+  )
+
+metadata_df <- metadata_df[, -2]
+```
+
+
+
+
+
+## REORGANISER LES METADONNEES:
+```{r}
+colonnes_metas <- c("ACCESSION", "SOURCE", "ORGANISM", "AUTHORS", "TITLE", "Assembly Method", "Sequencing Technology", "Location/Qualifiers")
+for (colonne in colonnes_metas) {
+  metadata_df[[colonne]] <- sub(paste0("^", colonne, "\\s+"), "", metadata_df[[colonne]])
+}
+
+
+metadata_df[,'Assembly Method'] <- sub(':: ', '', metadata_df[,'Assembly Method'])
+metadata_df[,"Sequencing Technology"] <- sub(':: ', '', metadata_df[,"Sequencing Technology"])
+metadata_df[,"Location/Qualifiers"] <- sub('source ', '', metadata_df[,"Location/Qualifiers"])
+
+
+columns_to_process <- c("genotype", "organism", "mol_type", "isolation_source", "host", "country", "note")
+for (col in columns_to_process) {
+  metadata_df[[col]] <- sub(paste0(col, '='), '', metadata_df[[col]])
+}
+
+# AJOUTER LES DATES DE SOUMISSION SUR NCBI:
+dates_soumission = str_extract(metadata, "VRL\\s+(.*?)\n")
+metadata_df[,'DateSoumission'] <- sub('VRL ', '', dates_soumission)
+
+print(metadata_df)
+```
+
+
+```{r}
+# Remplacez toutes les modalités contenant "pig" par "pig" dans la colonne "host"
+metadata_df$host <- gsub(".*Chicken.*", "Chicken", metadata_df$host, ignore.case = TRUE)
+
+# Ajoutez une colonne "Sequence_Length" avec les 4 derniers éléments de "Location.Qualifiers"
+metadata_df$Sequence_Length <- substr(metadata_df$`Location/Qualifiers`, nchar(metadata_df$`Location/Qualifiers`) - 4, nchar(metadata_df$`Location/Qualifiers`))
+
+metadata_df$ORF = metadata_df$note
+metadata_df$ORF <- gsub(".*ORF1.*", "ORF1", metadata_df$ORF, ignore.case = TRUE)
+metadata_df$ORF <- gsub(".*ORF2.*", "ORF2", metadata_df$ORF, ignore.case = TRUE)
+metadata_df$ORF <- gsub(".*ORF3.*", "ORF3", metadata_df$ORF, ignore.case = TRUE)
+
+library(dplyr)
+metadata_df$ORF <- ifelse(grepl("ORF", metadata_df$ORF, ignore.case = TRUE), metadata_df$ORF, NA)
+```
+
+```{r}
+write.csv2(metadata_df, "HEV_Metadonnees.csv", row.names = FALSE)
+```
+
+
+## Supprimer les sequences sans nom de pays:
+```{r}
+library(dplyr)
+
+HEV_metadata = read.csv2('HEV_Metadonnees.csv')
+HEV_metadata = data.frame(HEV_metadata)
+dim(HEV_metadata)
+head(HEV_metadata)
+```
+
+```{r}
+length(which(is.na(HEV_metadata$country)))
+HEV_metadata[which(is.na(HEV_metadata$country)), ]
+HEV_metadata = HEV_metadata[-which(is.na(HEV_metadata$country)), ]
+```
+
+
+## Supprimer les sequences sans date de soumission:
+```{r}
+length(which(is.na(HEV_metadata$Date)))
+HEV_metadata[which(is.na(HEV_metadata$Date)), ]
+HEV_metadata = HEV_metadata[-which(is.na(HEV_metadata$Date)), ]
+```
+
+## Modification Date et pays:
+```{r}
+library(dplyr)
+library(tidyverse)
+
+HEV_metadata$Pays  = str_extract(HEV_metadata$country, "^[^:]+")
+HEV_metadata$Annee <- substr(HEV_metadata$DateSoumission, 7,11)
+HEV_metadata$Annee <- gsub("-", "", HEV_metadata$Annee)
+```
+
+## Dimension jeux de donnees apres nettoyage:
+```{r}
+dim(HEV_metadata)
+length(which(is.na(HEV_metadata$genotype))) # Nombre de sequences sans genotype
+
+write.csv2(HEV_metadata, "HEV_metadonneesFiltrees.csv", row.names = FALSE)
+```
+
+
+
+### NETTOYER ET FILTTRE LE FICHIER FASTA:
+```{r, include=FALSE}
+library(seqinr)
+library(dplyr)
+
+# Lire les séquences FASTA
+sequences <- read.fasta("HEV_Genomes.fasta")
+
+# Sélectionner les numéros d'accession à conserver (en supprimant les extensions)
+accession_numbers <- HEV_metadata$ACCESSION
+accession_numbers <- gsub("\\.\\d+$", "", accession_numbers)  # Supprimer l'extension
+
+# Créer une liste vide pour stocker les séquences filtrées
+filtered_sequences <- list()
+
+# Créer une liste vide pour stocker les noms des séquences filtrées
+sequence_names <- list()
+
+# Parcourir les séquences et les ajouter à la liste filtrée si elles correspondent à un numéro d'accession
+for (i in 1:length(sequences)) {
+  sequence <- sequences[[i]]
+  header <- attr(sequence, "name")
+  
+  # Extraire le numéro d'accession de l'en-tête de séquence (en supprimant l'extension)
+  accession <- gsub("\\.\\d+$", "", strsplit(header, " ")[[1]][1])
+  
+  # Afficher le numéro d'accession pour le débogage
+  cat("Accession:", accession, "\n")
+  
+  # Vérifier si le numéro d'accession est dans la liste des accessions à conserver
+  if (accession %in% accession_numbers) {
+    filtered_sequences <- c(filtered_sequences, list(sequence))
+    sequence_names <- c(sequence_names, header)
+  }
+}
+
+# Écrire les séquences filtrées dans un nouveau fichier FASTA
+output_file <- "C:/@Bioiformatique mini-projets/Curation Bases de donnees NCBI/HEV_Genomes_Filtres.fasta"
+
+write.fasta(filtered_sequences, names = sequence_names, file.out = output_file)
+```
+
+
+
+

@@ -1,0 +1,40 @@
+---
+title: "curation 2"
+author: "Serigne Fallou MBacke NGOM"
+date: "2023-11-16"
+output: html_document
+---
+
+### Rechercher et Télécharger les Séquences ADN completes du Virus de l'Hépatite E:
+```{r, include=FALSE}
+library(rentrez)
+
+# Effectuer une recherche sur NCBI pour "Hepatitis E virus" et "complete genome"
+h <- " 'Hepatitis E virus' AND 'complete genome' "
+entrez_search <- entrez_search(db = "Nucleotide", term = search_term, retmax = 1079)
+
+# Récupérer les IDs des séquences correspondantes
+ids <- entrez_search$ids
+
+# Initialiser une liste pour stocker les séquences FASTA
+fasta_list <- list()
+
+# Télécharger les séquences FASTA pour chaque ID
+for (id in ids) {
+  entrez_fetch_fasta <- entrez_fetch(db = "nucleotide", id = id, rettype = "fasta", retmode = "text", timeout = 60)
+  fasta_list[[id]] <- entrez_fetch_fasta
+}
+
+# Fusionner les séquences FASTA en une seule chaîne
+fasta_content <- unlist(fasta_list)
+writeLines(fasta_content, "HEV_Genomes_2.fasta", sep = "")
+```
+
+```{r}
+length(ids)
+```
+
+
+
+
+
