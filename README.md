@@ -28,8 +28,11 @@ Sauvegarder les résultats sous forme de fichiers .fasta et .csv.
 ### Filtrage des séquences FASTA :
 Filtrage des séquences FASTA pour ne conserver que celles correspondant aux métadonnées filtrées.
 
+### Visualisation des metadonnees.
+
 ## Fichiers générés 
 HEV_Genomes.fasta : Fichier contenant toutes les séquences FASTA téléchargées.
 HEV_Metadonnees.csv : Fichier CSV avec les métadonnées brutes.
 HEV_metadonneesFiltrees.csv : Fichier CSV avec les métadonnées nettoyées.
 HEV_Genomes_Filtres.fasta : Fichier FASTA contenant les séquences filtrées.
+Graphes
